@@ -1,1 +1,113 @@
-<attachment contenteditable="false" data-atts="%5B%5D" data-aid=".atts-7ad4955d-3f19-448e-b280-345530a93bf6"></attachment><p>解决思路</p><p>	A(主服务器)-------》定时备份-----------》B(备份A服务器文件)</p><p>1.两台服务器都进行安装</p><p>查看是否存在此软件，<span style="color: rgb(102, 102, 102);">rsync --version 这个是否存在 存在不用在进行安装。</span></p><p>安装srync服务端（我的是centos，如果你是BSD，使用ports安装）</p><p># 先搜索一下rsync具体的名字是什么</p><p>yum search rsync</p><p># 搜索结果会显示完整的rsync名，接下来安装他，安装很快。</p><p>yum install rsync.x86_64</p><p><br></p><p><br></p>
+<attachment contenteditable="false" data-atts="%5B%5D" data-aid=".atts-7ad4955d-3f19-448e-b280-345530a93bf6"></attachment><p>1、安装srync服务端
+# 先搜索一下rsync具体的名字是什么
+yum search rsync
+# 搜索结果会显示完整的rsync名，接下来安装他，安装很快。
+yum install rsync.x86_64
+
+
+安装完成后开始搭建 并且实现。
+
+目标
+	A（主服务器） --》 从服务器（B）
+
+
+
+2、配置服务端 A rsync
+
+
+	#检查 /etc/rsyncd.conf 文件是否存在
+	#存在直接写内容&nbsp;不存在创建一下。
+
+	vi /etc/rsyncd.conf
+
+	#文件内容
+	uid = root
+	gid = root
+	use chroot = yes	#这个是忽略软连接
+	max connections = 4
+	pid file = /var/run/rsyncd.pid
+	lock file = /var/run/rsync.lock
+	log file = /var/log/rsyncd.log
+	# 以下是所有的模块，每一个模块指定一个需要备份的目录（客户端备份时只需指定模块名就可以了）
+	[web1]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#此为模块名称
+	path = /home/ftp/1520/web1-xxx/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#指定需要备份的目录
+	ignore errors
+	read only = true&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#是否只读
+	list = false
+	hosts allow = 223.21.39.41&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#允许连接的客户端IP
+	auth users = backup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#指定用于连接验证的用户名
+	secrets file = /etc/rsync.passwd&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#密码校验文件
+	[web2]&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#此为模块名称
+	path = /home/ftp/1520/web2-xxx/&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#指定需要备份的目录
+	ignore errors
+	read only = true&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#是否只读
+	list = false
+	hosts allow = 223.21.39.41&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#允许连接的客户端IP
+	auth users = backup&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#指定用于连接验证的用户名
+	secrets file = /etc/rsync.passwd&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;#密码校验文件
+
+3.创建 用户和密码&nbsp;这里的用户不是系统用户&nbsp;看很多帖子创建linux&nbsp;用户 其实不用。
+
+	# 按如下格式输入用户名密码
+	vi /etc/rsync.passwd&nbsp;&nbsp;
+	#这里建议输入一个较为复杂的密码&nbsp;这个用户 就是你rsyncd.conf 里写的auth users 用户
+	backup:123456&nbsp;&nbsp;
+
+4、设置此密码文件所属用户和组都为 root，且权限必须为600&nbsp;
+chown root:root /etc/rsync.passwd
+chmod 600 /etc/rsync.passwd&nbsp;
+
+5.配置文件
+	配置
+	/usr/bin/rsync --daemon --config=/etc/rsyncd.conf
+	重启
+	/usr/bin/rsync --daemon
+
+6、管理和重启rsync&nbsp;
+# centos使用xinetd方式运行rsync，所以重启xinetd就OK了。
+chkconfig rsync on
+service xinetd restart
+# 这里如果出现错误，大多数是因为没有xinetd。安装一下就ok了。
+yum search xinetdyum install xinetd.x86_64 #重新执行重启xinetd命令
+# 到这里服务端的配置就已经完成了，处于等待连接的状态！下面进行客户端的安装和配置！
+
+
+A 服务器 搭建完成。
+
+B（从服务器）开始整理
+
+先检查是否安装了 rsync服务 是否安装 没安装 赶紧安装
+
+
+
+服务端 先手动测试 是否能够下载服务器文件 测试服务器是联通
+	/usr/local/rsync/bin/rsync -vzrtopg --delete --progress --password-file=/etc/rsync.passwd backup@xxx.xxx.xxx.xxx::web1 /home/ftp/1520/web1-xxx/
+	
+	A B 服务器的 rsync端口 开通&nbsp;&nbsp;默认端口是 873
+
+	阿里云服务器 还要配置 安全组配置&nbsp;必要增加上。
+
+	查看是否开通 iptables -L -n
+
+
+	我直接上 最常见的三个问题 怎么解决 基本上就这三问题
+
+	第一个是 A 服务器没启动&nbsp;或者是防火墙没开
+
+		rsync: failed to connect to 192.168.170.133 (192.168.170.133): Connection refused (111)
+		rsync error: error in socket IO (code 10) at clientserver.c(125) [Receiver=3.1.2]
+
+	第二是 密码问题 A/B 服务器&nbsp;密码对不上&nbsp;或者是 密码里又空格
+		@ERROR: auth failed on module girl
+		rsync error: error starting client-server protocol (code 5) at main.c(1648) [Receiver=3.1.2]
+
+	第三个 是B服务器 密码错误
+		ERROR: auth failed
+		rsync error: error starting client-server protocol (code 5) at main.c(1648) [Receiver=3.1.2]
+
+	第二个和第三个 很像&nbsp;唯一的差别就是&nbsp;多一个&nbsp;module girl
+	我上网查 说是没有这个&nbsp;/etc/rsyncd.conf&nbsp;文件配置里 没有这个模块 不排除&nbsp;但是不要被 迷糊&nbsp;害的老子找了半天还是 不行。
+
+如果手动成功&nbsp;自动就简单了&nbsp;就创建一个sh文件&nbsp;建立一个密码文件
+
+定时执行 当然还可以 装一个文件监控软件&nbsp;文件有变动 就触发这个脚本就ok 了。</p><p><br></p>
